@@ -40,3 +40,10 @@ AD_OVERLAY_SELECTORS = [
 
 # Skeletons
 SKELETON_SELECTOR = ".button-skeleton"
+
+# Selector to confirm the like button is actively liked (filled heart / red state)
+LIKED_BUTTON_CONFIRMATION_SELECTORS = [
+    "svg.icon-favoritefilled",
+    "svg[class*='favoritefilled']",
+    "button.action-item svg[class*='favoritefilled']",
+]

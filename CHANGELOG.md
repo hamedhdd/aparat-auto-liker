@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.1] - 2026-09-28
+
+### Fixed
+- Fixed like button click confirmation to strictly wait for the active red/pink filled heart state (`svg.icon-favoritefilled` and computed crimson red style `#DF0F50`) before capturing the screenshot.
+- Added duplicate-click prevention: automatically skips clicking if the like button is already active/liked to prevent inadvertent un-liking.
+- Scoped in-stream advertisement overlay detection strictly to the video player container to avoid false positives caused by static sidebar banner advertisements.
+- Positioned mouse away from the like button prior to screenshot capture to prevent hover tooltips or focus rings from obscuring the red button.
+
 ## [1.0.0] - 2026-09-28
 
 ### Added

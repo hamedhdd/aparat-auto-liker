@@ -94,11 +94,15 @@ def wait_for_ad_completion(page: Page, timeout: int = MAX_AD_WAIT_SECONDS, auto_
                 !v.className.includes('rp-hidden')
             );
             
-            // Check for ad overlay indicators
-            let hasAdOverlay = false;
-            const overlays = document.querySelectorAll('[class*="ad-title"], [class*="rp-z-[1000]"]');
-            if (overlays.length > 0) {
-                hasAdOverlay = true;
+            // Check for in-player skip countdown or button
+            let hasInPlayerAdOverlay = false;
+            const playerOverlayBtns = document.querySelectorAll('button[class*="rp-z-"], [class*="rp-"] button');
+            for (let b of playerOverlayBtns) {
+                const t = (b.innerText || '').trim();
+                if (t.includes('رد کردن') || t.includes('ثانیه تا') || /^\d+$/.test(t)) {
+                    hasInPlayerAdOverlay = true;
+                    break;
+                }
             }
             
             const skeletons = document.querySelectorAll('.button-skeleton').length;
@@ -109,7 +113,7 @@ def wait_for_ad_completion(page: Page, timeout: int = MAX_AD_WAIT_SECONDS, auto_
                 adVideoEnded: adVideo ? adVideo.ended : null,
                 adVideoCurrentTime: adVideo ? adVideo.currentTime : null,
                 adVideoDuration: adVideo ? adVideo.duration : null,
-                hasAdOverlay: hasAdOverlay,
+                hasInPlayerAdOverlay: hasInPlayerAdOverlay,
                 mainVideoFound: !!mainVideo,
                 mainVideoPlaying: mainVideo ? !mainVideo.paused : false,
                 skeletonsCount: skeletons
@@ -122,13 +126,13 @@ def wait_for_ad_completion(page: Page, timeout: int = MAX_AD_WAIT_SECONDS, auto_
         # Check if ad is done:
         if ad_detected:
             # If ad was detected, it is finished when ad video ended or disappears,
-            # and main video is playing without ad overlay
-            if not status["adVideoFound"] or status["adVideoEnded"] or (status["mainVideoPlaying"] and not status["hasAdOverlay"]):
+            # and main video is playing or in-player ad overlay is gone
+            if not status["adVideoFound"] or status["adVideoEnded"] or (status["mainVideoPlaying"] and not status["hasInPlayerAdOverlay"]):
                 logger.info(f"Advertisement finished after {elapsed}s.")
                 return True
         else:
-            # If no ad was detected after 10s and page has loaded skeletons/main video
-            if elapsed > 10 and (status["mainVideoFound"] or status["skeletonsCount"] == 0):
+            # If no ad was detected after 8s and page has loaded skeletons/main video
+            if elapsed > 8 and (status["mainVideoFound"] or status["skeletonsCount"] == 0):
                 logger.info(f"No advertisement detected (elapsed: {elapsed}s). Proceeding to content.")
                 return True
 
@@ -138,16 +142,27 @@ def wait_for_ad_completion(page: Page, timeout: int = MAX_AD_WAIT_SECONDS, auto_
     return False
 
 
+def is_like_button_active(page: Page) -> bool:
+    """Checks whether the like button is currently in the active/liked red state."""
+    return page.evaluate("""() => {
+        const b = document.querySelector('button[aria-label*="پسند"], [role="button"][aria-label*="پسند"], button.action-item');
+        if (!b) return false;
+        const hasFilled = !!b.querySelector('svg.icon-favoritefilled, svg[class*="favoritefilled"]');
+        const style = window.getComputedStyle(b);
+        const isRed = style.color === 'rgb(223, 15, 80)' || style.backgroundColor.includes('223, 15, 80');
+        return hasFilled || isRed;
+    }""")
+
+
 def find_and_click_like_button(page: Page, timeout: int = 25) -> Tuple[bool, Optional[str]]:
     """
-    Locates the like button on the Aparat video page, scrolls it into view,
-    clicks it, and verifies state change.
+    Locates the like button on the Aparat video page, verifies whether it is already liked,
+    scrolls it into view, clicks it, and confirms it turns to the active red/pink filled heart state.
     Returns (success: bool, like_text: Optional[str]).
     """
     logger.info("Searching for like button...")
     start_time = time.time()
     like_btn: Optional[Locator] = None
-    button_label: str = ""
 
     while time.time() - start_time < timeout:
         # Wait for skeleton placeholders to clear
@@ -180,40 +195,54 @@ def find_and_click_like_button(page: Page, timeout: int = 25) -> Tuple[bool, Opt
         like_btn.scroll_into_view_if_needed(timeout=5000)
         time.sleep(0.5)
 
-        # Get initial state / text
+        # Check if already liked
+        if is_like_button_active(page):
+            button_label = like_btn.get_attribute("aria-label") or like_btn.inner_text() or "Liked"
+            logger.info(f"Like button is already in active RED state ({button_label}).")
+            return True, button_label
+
         button_label = like_btn.get_attribute("aria-label") or like_btn.inner_text() or "Like"
         logger.info(f"Found like button (initial: '{button_label}'). Clicking...")
 
-        # Click the like button
-        like_btn.click(force=True)
-        time.sleep(1.5)
+        # Standard click on the button
+        like_btn.click()
 
-        # Verify new label/state
+        # Wait up to 10 seconds for the button to turn RED with filled heart
+        logger.info("Waiting for like button to turn RED (icon-favoritefilled)...")
+        confirmed_red = False
+        wait_start = time.time()
+        while time.time() - wait_start < 10:
+            if is_like_button_active(page):
+                confirmed_red = True
+                break
+            time.sleep(0.5)
+
+        # If still not red, try direct JS click
+        if not confirmed_red:
+            logger.warning("Red state not registered yet. Attempting direct JS click fallback...")
+            page.evaluate("""() => {
+                const b = document.querySelector('button[aria-label*="پسند"], [role="button"][aria-label*="پسند"], button.action-item');
+                if (b) b.click();
+            }""")
+            time.sleep(1.5)
+            confirmed_red = is_like_button_active(page)
+
         updated_label = like_btn.get_attribute("aria-label") or like_btn.inner_text() or button_label
-        logger.info(f"Like button clicked successfully! Current state: '{updated_label}'")
-        return True, updated_label
+        if confirmed_red:
+            logger.info(f"Like button confirmed RED! Current state: '{updated_label}'")
+            return True, updated_label
+        else:
+            logger.warning("Like button clicked, but red state could not be strictly confirmed.")
+            return False, updated_label
 
     except Exception as e:
         logger.error(f"Error clicking like button: {e}")
-        # Fallback to JavaScript dispatch
-        js_success = page.evaluate("""() => {
-            const btns = document.querySelectorAll('button, [role="button"]');
-            for (let b of btns) {
-                const aria = b.getAttribute('aria-label') || '';
-                if (aria.includes('پسند')) {
-                    b.scrollIntoView({behavior: 'instant', block: 'center'});
-                    b.click();
-                    return true;
-                }
-            }
-            return false;
-        }""")
-        return js_success, "Clicked via DOM fallback"
+        return False, None
 
 
 def capture_screenshot_with_like_button(page: Page, output_path: Path) -> Path:
     """
-    Ensures the like button and video player are properly visible and centered
+    Ensures the like button (in active red state) and video player are properly visible and centered
     in the viewport before taking the screenshot.
     """
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -222,7 +251,7 @@ def capture_screenshot_with_like_button(page: Page, output_path: Path) -> Path:
     page.evaluate("""() => {
         const likeBtn = document.querySelector('button[aria-label*="پسند"], [role="button"][aria-label*="پسند"], button.action-item');
         if (likeBtn) {
-            // Scroll so like button is in upper-mid lower quadrant with player above
+            // Scroll so like button is comfortably framed below the player
             const rect = likeBtn.getBoundingClientRect();
             window.scrollBy({
                 top: rect.top - 380,
@@ -230,6 +259,9 @@ def capture_screenshot_with_like_button(page: Page, output_path: Path) -> Path:
             });
         }
     }""")
+
+    # Move cursor to top-left to avoid triggering hover tooltip overlays on the like button
+    page.mouse.move(10, 10)
     time.sleep(1)
 
     # Take screenshot
