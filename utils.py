@@ -1,6 +1,7 @@
 """
 Utility helpers for Aparat video automation.
 """
+import os
 import re
 import time
 import logging
@@ -21,6 +22,20 @@ from config import (
 )
 
 logger = logging.getLogger("AparatLiker")
+
+
+def get_browser_executable() -> Optional[str]:
+    """Detects native Chrome or Chromium binary on Linux or Windows."""
+    candidates = [
+        "/usr/bin/chromium",
+        "/usr/bin/chromium-browser",
+        "/usr/bin/google-chrome",
+        "/usr/bin/google-chrome-stable",
+    ]
+    for c in candidates:
+        if os.path.exists(c):
+            return c
+    return None
 
 
 def extract_video_id(url: str) -> str:

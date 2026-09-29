@@ -29,6 +29,7 @@ from utils import (
     wait_for_ad_completion,
     find_and_click_like_button,
     capture_screenshot_with_like_button,
+    get_browser_executable,
 )
 
 if sys.stdout:
@@ -141,19 +142,28 @@ def process_aparat_link(url: str, output_dir: Path, theme: str = DEFAULT_THEME) 
     if theme == "dark":
         chrome_args.extend(["--force-dark-mode", "--enable-features=WebContentsForceDark"])
 
+    exec_path = get_browser_executable()
     with sync_playwright() as p:
-        try:
+        if exec_path:
+            logger.info(f"Using system browser executable: {exec_path}")
             browser = p.chromium.launch(
-                channel="chrome",
+                executable_path=exec_path,
                 headless=True,
                 args=chrome_args,
             )
-        except Exception:
-            logger.info("Chrome channel unavailable; using default Chromium...")
-            browser = p.chromium.launch(
-                headless=True,
-                args=chrome_args,
-            )
+        else:
+            try:
+                browser = p.chromium.launch(
+                    channel="chrome",
+                    headless=True,
+                    args=chrome_args,
+                )
+            except Exception:
+                logger.info("Chrome channel unavailable; using default Chromium...")
+                browser = p.chromium.launch(
+                    headless=True,
+                    args=chrome_args,
+                )
 
         context = browser.new_context(
             viewport={"width": 1440, "height": 900},

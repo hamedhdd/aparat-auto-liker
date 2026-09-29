@@ -28,6 +28,7 @@ from utils import (
     wait_for_ad_completion,
     find_and_click_like_button,
     capture_screenshot_with_like_button,
+    get_browser_executable,
 )
 
 # Ensure proper unicode terminal handling on Windows
@@ -137,21 +138,23 @@ def run(
     if theme == "dark":
         chrome_args.extend(["--force-dark-mode", "--enable-features=WebContentsForceDark"])
 
+    exec_path = get_browser_executable()
     with sync_playwright() as p:
-        # Launch using Google Chrome channel, with fallback to bundled Chromium
+        # Launch using detected browser executable or Google Chrome channel
         if user_data_dir:
             logger.info(f"Using persistent Chrome user data directory: {user_data_dir}")
             try:
                 context = p.chromium.launch_persistent_context(
                     user_data_dir=user_data_dir,
-                    channel="chrome",
+                    executable_path=exec_path,
+                    channel="chrome" if not exec_path else None,
                     headless=headless,
                     args=chrome_args + ["--start-maximized"],
                     color_scheme=theme,
                     viewport=None,
                 )
             except Exception:
-                logger.info("Chrome channel unavailable; using default Chromium for persistent context...")
+                logger.info("Using default Chromium for persistent context...")
                 context = p.chromium.launch_persistent_context(
                     user_data_dir=user_data_dir,
                     headless=headless,
@@ -161,18 +164,26 @@ def run(
                 )
             browser = None
         else:
-            try:
+            if exec_path:
+                logger.info(f"Using system browser executable: {exec_path}")
                 browser = p.chromium.launch(
-                    channel="chrome",
+                    executable_path=exec_path,
                     headless=headless,
                     args=chrome_args,
                 )
-            except Exception:
-                logger.info("Chrome channel unavailable; falling back to bundled Chromium...")
-                browser = p.chromium.launch(
-                    headless=headless,
-                    args=chrome_args,
-                )
+            else:
+                try:
+                    browser = p.chromium.launch(
+                        channel="chrome",
+                        headless=headless,
+                        args=chrome_args,
+                    )
+                except Exception:
+                    logger.info("Chrome channel unavailable; falling back to bundled Chromium...")
+                    browser = p.chromium.launch(
+                        headless=headless,
+                        args=chrome_args,
+                    )
             context = browser.new_context(
                 viewport={"width": 1440, "height": 900},
                 user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36",

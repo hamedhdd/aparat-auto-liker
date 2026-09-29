@@ -5,6 +5,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.1] - 2026-09-29
+
+### Added
+- **Native Browser Auto-Detection (`get_browser_executable`)**: Added support for automatic detection of system-installed Chromium/Chrome binaries (`/usr/bin/chromium`, `/usr/bin/google-chrome`), bypassing geo-restricted Playwright CDN downloads on restricted Linux servers.
+
 ## [1.2.0] - 2026-09-29
 
 ### Added
