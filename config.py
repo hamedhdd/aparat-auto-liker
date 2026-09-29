@@ -47,3 +47,11 @@ LIKED_BUTTON_CONFIRMATION_SELECTORS = [
     "svg[class*='favoritefilled']",
     "button.action-item svg[class*='favoritefilled']",
 ]
+
+# Theme & UI Styling
+DEFAULT_THEME = "dark"  # 'dark' or 'light'
+
+# Screenshot Framing & Address Bar
+INCLUDE_ADDRESS_BAR_DEFAULT = True
+CHROME_TOPBAR_HEIGHT = 84
+LIKE_BUTTON_BOTTOM_OFFSET = 30  # Pixel padding from bottom edge of screenshot

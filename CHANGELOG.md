@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.0] - 2026-09-29
+
+### Added
+- **Dark Theme Support**: Browser launched with `--force-dark-mode` and pre-configured with `theme=dark` Aparat cookie and `color_scheme="dark"` by default.
+- **Chrome Address Bar Integration**: Built-in generator creating an authentic Google Chrome Dark Mode top bar (tab with Aparat icon and title, window controls, and Omnibox address bar showing SSL lock and video URL) seamlessly composited on top of screenshots.
+- **Bottom-Aligned Like Button**: Implemented dynamic viewport scroll adjustment that aligns the active like button right at the bottom edge of the screenshot with the video player displayed directly above.
+- **New CLI Flags**: Added `--theme` (choice: `dark` or `light`) and `--no-address-bar` to toggle header integration.
+
+### Fixed
+- Fixed in-stream video ad completion detection by checking `adVideo.paused` and `mainVideo.currentTime` so that skipped or concluded ads immediately advance to the like stage without waiting for maximum timeout.
+
 ## [1.0.1] - 2026-09-28
 
 ### Fixed

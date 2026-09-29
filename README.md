@@ -6,7 +6,10 @@ An automated script built with Python and Playwright (targeting Google Chrome) t
 
 ## Features
 
-- **Google Chrome Native Integration**: Directly launches installed Google Chrome browser (`channel="chrome"`) with anti-detection flags.
+- **Google Chrome Native Integration**: Directly launches installed Google Chrome browser (`channel="chrome"`) with anti-detection flags and native dark mode (`--force-dark-mode`).
+- **Dark Theme by Default**: Sets browser context and Aparat session cookie to dark theme (`theme=dark`).
+- **Chrome Address Bar in Screenshots**: Includes an authentic Google Chrome Dark Mode top bar displaying the tab with favicon, SSL lock icon, and the exact target URL (`https://www.aparat.com/v/...`).
+- **Bottom-Aligned Like Button**: Dynamically scrolls the view so the active like button sits squarely at the bottom of the screenshot with the main video container prominent above it.
 - **Smart Ad Detection & Handling**:
   - Automatically identifies in-stream video advertisements from Aparat CDN (`aparat-ads`).
   - Detects ad countdown timers and skip triggers (`رد کردن آگهی` / `رد کردن تبلیغ` / `Skip`).
@@ -14,11 +17,8 @@ An automated script built with Python and Playwright (targeting Google Chrome) t
 - **Resilient Like Button Interaction**:
   - Multi-tiered selector engine matching Persian aria-labels (`پسندیدن`, `نفر پسندیدند`), element attributes, and SVG icons.
   - Automatically waits for client-side skeleton placeholders to hydrate.
-  - Scrolls the like button smoothly into view and triggers the click action.
-  - Validates the post-click state change (incremented count / active heart).
-- **Framed Screenshot Capture**:
-  - Dynamically centers the like button and video container within the viewport.
-  - Generates high-resolution PNG screenshots saved with video ID and timestamp.
+  - Validates post-click state change (crimson red `#DF0F50` fill and active heart icon `icon-favoritefilled`).
+  - Safeguard prevents un-liking if already liked.
 - **User Profile Session Support**:
   - Allows passing `--user-data-dir` to reuse existing logged-in Chrome sessions/cookies.
 - **Batch Processing**:
@@ -112,6 +112,8 @@ python aparat_liker.py -f urls.txt --headless
 | `urls` | Positional | `https://www.aparat.com/v/ovw9yg1` | One or more Aparat video URLs |
 | `--file` | `-f` | `None` | Path to text file with URLs |
 | `--output-dir` | `-o` | `./screenshots` | Folder to store captured PNGs |
+| `--theme` | | `dark` | Browser theme (`dark` or `light`) |
+| `--no-address-bar` | | `False` | Exclude Chrome top address bar from screenshot |
 | `--headless` | | `False` | Run Chrome in background without GUI |
 | `--user-data-dir`| `-u` | `None` | Path to Chrome user data profile |
 | `--no-skip` | | `False` | Disable auto-clicking 'Skip Ad' |

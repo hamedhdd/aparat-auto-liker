@@ -20,6 +20,8 @@ from config import (
     PAGE_LOAD_TIMEOUT,
     VIDEO_PLAYER_TIMEOUT,
     MAX_AD_WAIT_SECONDS,
+    DEFAULT_THEME,
+    INCLUDE_ADDRESS_BAR_DEFAULT,
 )
 from utils import (
     extract_video_id,
@@ -47,13 +49,15 @@ def process_video_url(
     output_dir: Path,
     auto_skip: bool = True,
     ad_timeout: int = MAX_AD_WAIT_SECONDS,
+    include_address_bar: bool = INCLUDE_ADDRESS_BAR_DEFAULT,
 ) -> bool:
     """
     Processes a single Aparat video URL:
     1. Opens URL in Chrome tab.
     2. Waits for ad to finish (or skips it).
     3. Clicks Like button.
-    4. Takes a screenshot with like button visible.
+    4. Takes a screenshot with like button visible at bottom of frame,
+       including Chrome dark address bar at the top.
     """
     logger.info(f"==> Navigating to video: {url}")
     video_id = extract_video_id(url)
@@ -61,7 +65,7 @@ def process_video_url(
 
     try:
         page = context.new_page()
-        # Set viewport for crisp 1080p desktop presentation
+        # Set viewport for crisp desktop presentation
         page.set_viewport_size({"width": 1440, "height": 900})
 
         # Load page
@@ -87,12 +91,17 @@ def process_video_url(
         else:
             logger.info(f"Successfully liked video ({like_info})")
 
-        # 3. Take screenshot
+        # 3. Take screenshot with address bar and bottom-aligned like button
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         screenshot_filename = f"aparat_{video_id}_{timestamp}.png"
         screenshot_path = output_dir / screenshot_filename
 
-        saved_path = capture_screenshot_with_like_button(page, screenshot_path)
+        saved_path = capture_screenshot_with_like_button(
+            page=page,
+            output_path=screenshot_path,
+            url=url,
+            include_address_bar=include_address_bar,
+        )
         logger.info(f"==> [SUCCESS] Screenshot saved: {saved_path.resolve()}\n")
         return True
 
@@ -115,12 +124,18 @@ def run(
     user_data_dir: Optional[str] = None,
     auto_skip: bool = True,
     ad_timeout: int = MAX_AD_WAIT_SECONDS,
+    theme: str = DEFAULT_THEME,
+    include_address_bar: bool = INCLUDE_ADDRESS_BAR_DEFAULT,
 ):
     """Launches Chrome via Playwright and executes liking workflow for all URLs."""
     output_dir.mkdir(parents=True, exist_ok=True)
     logger.info(f"Starting Aparat Auto-Liker for {len(urls)} link(s)")
-    logger.info(f"Headless mode: {headless} | Auto-skip ads: {auto_skip}")
+    logger.info(f"Theme: {theme} | Headless: {headless} | Auto-skip ads: {auto_skip} | Address bar: {include_address_bar}")
     logger.info(f"Screenshots directory: {output_dir.resolve()}")
+
+    chrome_args = ["--disable-blink-features=AutomationControlled"]
+    if theme == "dark":
+        chrome_args.extend(["--force-dark-mode", "--enable-features=WebContentsForceDark"])
 
     with sync_playwright() as p:
         # Launch using Google Chrome channel installed on system
@@ -130,7 +145,8 @@ def run(
                 user_data_dir=user_data_dir,
                 channel="chrome",
                 headless=headless,
-                args=["--start-maximized", "--disable-blink-features=AutomationControlled"],
+                args=chrome_args + ["--start-maximized"],
+                color_scheme=theme,
                 viewport=None,
             )
             browser = None
@@ -138,12 +154,18 @@ def run(
             browser = p.chromium.launch(
                 channel="chrome",
                 headless=headless,
-                args=["--disable-blink-features=AutomationControlled"],
+                args=chrome_args,
             )
             context = browser.new_context(
                 viewport={"width": 1440, "height": 900},
                 user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36",
+                color_scheme=theme,
             )
+
+        # Pre-set Aparat dark theme cookie
+        context.add_cookies([
+            {"name": "theme", "value": theme, "domain": ".aparat.com", "path": "/"}
+        ])
 
         for index, url in enumerate(urls, start=1):
             logger.info(f"[{index}/{len(urls)}] Processing {url}")
@@ -153,6 +175,7 @@ def run(
                 output_dir=output_dir,
                 auto_skip=auto_skip,
                 ad_timeout=ad_timeout,
+                include_address_bar=include_address_bar,
             )
 
         # Cleanup
@@ -186,6 +209,19 @@ def main():
         type=str,
         default=str(DEFAULT_SCREENSHOT_DIR),
         help=f"Directory to save screenshots (default: {DEFAULT_SCREENSHOT_DIR})",
+    )
+    parser.add_argument(
+        "--theme",
+        type=str,
+        default=DEFAULT_THEME,
+        choices=["dark", "light"],
+        help=f"Browser theme (default: {DEFAULT_THEME})",
+    )
+    parser.add_argument(
+        "--no-address-bar",
+        action="store_true",
+        default=False,
+        help="Do not include the Chrome address bar at the top of the screenshot",
     )
     parser.add_argument(
         "--headless",
@@ -235,6 +271,8 @@ def main():
         user_data_dir=args.user_data_dir,
         auto_skip=not args.no_skip,
         ad_timeout=args.timeout,
+        theme=args.theme,
+        include_address_bar=not args.no_address_bar,
     )
 
 

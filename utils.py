@@ -6,6 +6,8 @@ import time
 import logging
 from pathlib import Path
 from typing import Optional, Tuple
+import io
+from PIL import Image, ImageDraw, ImageFont
 from playwright.sync_api import Page, Locator
 
 from config import (
@@ -14,6 +16,8 @@ from config import (
     LIKE_SELECTORS,
     SKELETON_SELECTOR,
     MAX_AD_WAIT_SECONDS,
+    LIKE_BUTTON_BOTTOM_OFFSET,
+    INCLUDE_ADDRESS_BAR_DEFAULT,
 )
 
 logger = logging.getLogger("AparatLiker")
@@ -94,45 +98,51 @@ def wait_for_ad_completion(page: Page, timeout: int = MAX_AD_WAIT_SECONDS, auto_
                 !v.className.includes('rp-hidden')
             );
             
-            // Check for in-player skip countdown or button
-            let hasInPlayerAdOverlay = false;
-            const playerOverlayBtns = document.querySelectorAll('button[class*="rp-z-"], [class*="rp-"] button');
-            for (let b of playerOverlayBtns) {
+            // Check if skip button is present
+            let hasSkipBtn = false;
+            for (let b of document.querySelectorAll('button')) {
                 const t = (b.innerText || '').trim();
-                if (t.includes('رد کردن') || t.includes('ثانیه تا') || /^\d+$/.test(t)) {
-                    hasInPlayerAdOverlay = true;
+                if (t.includes('رد کردن') || t.includes('ثانیه تا رد کردن')) {
+                    hasSkipBtn = true;
                     break;
                 }
             }
             
+            const isAdEnded = !!(adVideo && (adVideo.ended || (adVideo.duration > 0 && adVideo.currentTime >= adVideo.duration - 0.5)));
+            const isAdActive = !!(adVideo && !adVideo.paused && !adVideo.ended && (adVideo.currentTime < (adVideo.duration || 999)));
+            const isMainPlaying = !!(mainVideo && !mainVideo.paused && mainVideo.currentTime > 0.5);
             const skeletons = document.querySelectorAll('.button-skeleton').length;
             
             return {
                 adVideoFound: !!adVideo,
-                adVideoPaused: adVideo ? adVideo.paused : null,
-                adVideoEnded: adVideo ? adVideo.ended : null,
-                adVideoCurrentTime: adVideo ? adVideo.currentTime : null,
-                adVideoDuration: adVideo ? adVideo.duration : null,
-                hasInPlayerAdOverlay: hasInPlayerAdOverlay,
+                isAdEnded: isAdEnded,
+                isAdActive: isAdActive,
+                hasSkipBtn: hasSkipBtn,
                 mainVideoFound: !!mainVideo,
-                mainVideoPlaying: mainVideo ? !mainVideo.paused : false,
+                isMainPlaying: isMainPlaying,
                 skeletonsCount: skeletons
             };
         }""")
 
-        if status["adVideoFound"]:
+        if status["adVideoFound"] or status["hasSkipBtn"]:
             ad_detected = True
 
         # Check if ad is done:
+        # 1. Main video has started active playback
+        if status["isMainPlaying"]:
+            logger.info(f"Main video playback confirmed ({elapsed}s). Advertisement finished.")
+            return True
+            
+        # 2. If ad was detected, wait until it ends and main video begins
         if ad_detected:
-            # If ad was detected, it is finished when ad video ended or disappears,
-            # and main video is playing or in-player ad overlay is gone
-            if not status["adVideoFound"] or status["adVideoEnded"] or (status["mainVideoPlaying"] and not status["hasInPlayerAdOverlay"]):
-                logger.info(f"Advertisement finished after {elapsed}s.")
+            if status["isAdEnded"] or (not status["isAdActive"] and not status["hasSkipBtn"] and status["mainVideoFound"]):
+                logger.info(f"Advertisement concluded after {elapsed}s.")
+                # Give 1 second for main video transition
+                time.sleep(1)
                 return True
         else:
-            # If no ad was detected after 8s and page has loaded skeletons/main video
-            if elapsed > 8 and (status["mainVideoFound"] or status["skeletonsCount"] == 0):
+            # 3. If no ad was ever detected after 10s and page is fully ready
+            if elapsed > 10 and (status["mainVideoFound"] or status["skeletonsCount"] == 0):
                 logger.info(f"No advertisement detected (elapsed: {elapsed}s). Proceeding to content.")
                 return True
 
@@ -240,31 +250,140 @@ def find_and_click_like_button(page: Page, timeout: int = 25) -> Tuple[bool, Opt
         return False, None
 
 
-def capture_screenshot_with_like_button(page: Page, output_path: Path) -> Path:
+def render_chrome_dark_topbar(width: int, url: str, page_title: str) -> Image.Image:
     """
-    Ensures the like button (in active red state) and video player are properly visible and centered
-    in the viewport before taking the screenshot.
+    Renders an authentic Google Chrome Dark Theme header including:
+    - Tab bar with Aparat favicon and page title
+    - Chrome window control buttons (minimize, maximize, close)
+    - Navigation buttons (Back, Forward, Reload)
+    - Full Omnibox Address Bar with SSL lock icon and active URL.
+    """
+    height = 84
+    img = Image.new("RGBA", (width, height), (32, 33, 36, 255))  # #202124 Chrome Dark
+    draw = ImageDraw.Draw(img)
+
+    # 1. Window controls on top-right (Minimize, Maximize, Close)
+    draw.line([(width - 25, 13), (width - 15, 23)], fill=(154, 160, 166, 255), width=1)
+    draw.line([(width - 15, 13), (width - 25, 23)], fill=(154, 160, 166, 255), width=1)
+    draw.rectangle([width - 55, 13, width - 45, 23], outline=(154, 160, 166, 255), width=1)
+    draw.line([(width - 85, 19), (width - 75, 19)], fill=(154, 160, 166, 255), width=1)
+
+    # 2. Active Tab
+    tab_width = min(260, width // 4)
+    tab_x0 = 80
+    tab_x1 = tab_x0 + tab_width
+    draw.rounded_rectangle([tab_x0, 8, tab_x1, 44], radius=8, fill=(41, 42, 45, 255))  # #292a2d
+
+    # Aparat red logo dot
+    draw.ellipse([tab_x0 + 12, 18, tab_x0 + 26, 32], fill=(223, 15, 80, 255))
+
+    # Font handling
+    try:
+        font_tab = ImageFont.truetype("arial.ttf", 12)
+        font_url = ImageFont.truetype("arial.ttf", 13)
+        font_icons = ImageFont.truetype("segoeui.ttf", 13)
+    except Exception:
+        font_tab = ImageFont.load_default()
+        font_url = ImageFont.load_default()
+        font_icons = ImageFont.load_default()
+
+    display_title = (page_title[:24] + "...") if len(page_title) > 24 else page_title
+    draw.text((tab_x0 + 34, 18), display_title, fill=(232, 234, 237, 255), font=font_tab)
+    draw.text((tab_x1 - 18, 17), "×", fill=(154, 160, 166, 255), font=font_tab)
+    draw.text((tab_x1 + 10, 16), "+", fill=(154, 160, 166, 255), font=font_icons)
+
+    # 3. Address Bar / Toolbar Row
+    draw.rectangle([0, 42, width, height], fill=(41, 42, 45, 255))  # #292a2d
+
+    # Navigation buttons: Back (←), Forward (→), Reload (↻)
+    draw.line([(18, 63), (28, 63)], fill=(154, 160, 166, 255), width=2)
+    draw.line([(18, 63), (23, 58)], fill=(154, 160, 166, 255), width=2)
+    draw.line([(18, 63), (23, 68)], fill=(154, 160, 166, 255), width=2)
+
+    draw.line([(42, 63), (52, 63)], fill=(95, 99, 104, 255), width=2)
+    draw.line([(52, 63), (47, 58)], fill=(95, 99, 104, 255), width=2)
+    draw.line([(52, 63), (47, 68)], fill=(95, 99, 104, 255), width=2)
+
+    draw.arc([66, 57, 78, 69], start=45, end=315, fill=(154, 160, 166, 255), width=2)
+    draw.polygon([(78, 56), (82, 61), (74, 61)], fill=(154, 160, 166, 255))
+
+    # 4. Omnibox / Address Bar Pill
+    omni_left = 95
+    omni_right = width - 110
+    omni_top = 48
+    omni_bottom = 78
+
+    draw.rounded_rectangle([omni_left, omni_top, omni_right, omni_bottom], radius=15, fill=(32, 33, 36, 255))
+
+    # SSL Lock Icon
+    lock_x = omni_left + 14
+    lock_y = omni_top + 8
+    draw.arc([lock_x + 2, lock_y, lock_x + 10, lock_y + 8], start=180, end=0, fill=(154, 160, 166, 255), width=2)
+    draw.rectangle([lock_x, lock_y + 5, lock_x + 12, lock_y + 14], fill=(154, 160, 166, 255))
+
+    # URL Text
+    draw.text((omni_left + 36, omni_top + 7), url, fill=(232, 234, 237, 255), font=font_url)
+
+    # Bookmark Star
+    draw.text((omni_right - 24, omni_top + 6), "★", fill=(154, 160, 166, 255), font=font_tab)
+
+    # Extensions and Profile icons
+    ext_x = width - 85
+    draw.rectangle([ext_x, 56, ext_x + 14, 70], outline=(154, 160, 166, 255), width=2)
+    prof_x = width - 45
+    draw.ellipse([prof_x, 54, prof_x + 18, 72], fill=(95, 99, 104, 255))
+
+    return img
+
+
+def capture_screenshot_with_like_button(
+    page: Page,
+    output_path: Path,
+    url: str,
+    include_address_bar: bool = INCLUDE_ADDRESS_BAR_DEFAULT,
+    bottom_offset: int = LIKE_BUTTON_BOTTOM_OFFSET,
+) -> Path:
+    """
+    Scrolls the page so the like button is positioned at the BOTTOM of the viewport,
+    captures the screenshot, and optionally composites an authentic Google Chrome dark
+    mode address bar at the top of the image.
     """
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
-    # Position page so video player and like button are both clearly visible
-    page.evaluate("""() => {
+    # Scroll page so like button is aligned at the bottom of the viewport
+    page.evaluate("""(offset) => {
         const likeBtn = document.querySelector('button[aria-label*="پسند"], [role="button"][aria-label*="پسند"], button.action-item');
         if (likeBtn) {
-            // Scroll so like button is comfortably framed below the player
             const rect = likeBtn.getBoundingClientRect();
+            const targetBottom = window.innerHeight - offset;
             window.scrollBy({
-                top: rect.top - 380,
+                top: rect.bottom - targetBottom,
                 behavior: 'instant'
             });
         }
-    }""")
+    }""", bottom_offset)
 
     # Move cursor to top-left to avoid triggering hover tooltip overlays on the like button
     page.mouse.move(10, 10)
     time.sleep(1)
 
-    # Take screenshot
-    page.screenshot(path=str(output_path), full_page=False)
+    # Take screenshot bytes
+    screenshot_bytes = page.screenshot(full_page=False)
+    page_img = Image.open(io.BytesIO(screenshot_bytes))
+
+    if include_address_bar:
+        video_id = extract_video_id(url)
+        topbar = render_chrome_dark_topbar(
+            width=page_img.width,
+            url=url,
+            page_title=f"Aparat - {video_id}",
+        )
+        combined = Image.new("RGB", (page_img.width, topbar.height + page_img.height))
+        combined.paste(topbar, (0, 0))
+        combined.paste(page_img, (0, topbar.height))
+        combined.save(str(output_path))
+    else:
+        page_img.save(str(output_path))
+
     logger.info(f"Screenshot successfully saved to: {output_path}")
     return output_path
