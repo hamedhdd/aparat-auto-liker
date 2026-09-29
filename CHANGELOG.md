@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.0] - 2026-09-29
+
+### Added
+- **Telegram Bot Integration (`telegram_bot.py`)**: Enables automated interaction via Telegram: send any Aparat video link and automatically receive the dark-mode framed screenshot with like confirmation.
+- **Linux Server & Headless Support**: Optimized Playwright to run seamlessly on Linux servers with automatic Chromium fallback, cross-platform font loading, and `playwright install chromium --with-deps` compatibility.
+- **Systemd Service Unit (`aparat-bot.service`)**: Ready-to-use daemon configuration for running the Telegram bot 24/7 on Ubuntu/Debian servers.
+- **Security & Network Flexibility**: Supports user ID access control whitelist (`--allowed-users`) and proxy routing (`--proxy` for SOCKS5/HTTP proxies on filtered networks).
+- **Deployment Documentation**: Created comprehensive runbook `Aparat_Telegram_Bot_Linux_Deployment_Guide.md` in `Antigravity_Docs`.
+
 ## [1.1.0] - 2026-09-29
 
 ### Added

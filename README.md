@@ -21,6 +21,8 @@ An automated script built with Python and Playwright (targeting Google Chrome) t
   - Safeguard prevents un-liking if already liked.
 - **User Profile Session Support**:
   - Allows passing `--user-data-dir` to reuse existing logged-in Chrome sessions/cookies.
+- **Telegram Bot Integration**: Built-in `telegram_bot.py` bot worker allows sending Aparat links via Telegram and receiving the captured screenshot directly in chat.
+- **Linux Server Ready**: Runs completely headless on Linux VPS (Ubuntu/Debian) with zero GUI required, supported by an included systemd service unit.
 - **Batch Processing**:
   - Supports single URLs, positional arguments, or a text file (`--file`) containing a list of links.
 
@@ -31,9 +33,11 @@ An automated script built with Python and Playwright (targeting Google Chrome) t
 ```
 aparat-auto-liker/
 ├── aparat_liker.py       # Main CLI script
+├── telegram_bot.py       # Telegram Bot interface
 ├── config.py             # Configurable timeouts, selectors, and paths
 ├── utils.py              # Ad monitoring, like button actions, screenshot framing
-├── requirements.txt      # Python dependencies (playwright)
+├── aparat-bot.service    # Linux systemd service unit template
+├── requirements.txt      # Python dependencies (playwright, requests, pillow)
 ├── README.md             # Project documentation
 ├── CHANGELOG.md          # Version history
 └── screenshots/          # Default directory for output screenshots
@@ -118,3 +122,45 @@ python aparat_liker.py -f urls.txt --headless
 | `--user-data-dir`| `-u` | `None` | Path to Chrome user data profile |
 | `--no-skip` | | `False` | Disable auto-clicking 'Skip Ad' |
 | `--timeout` | | `90` | Maximum ad monitoring timeout (sec) |
+
+---
+
+## Telegram Bot & Linux Server Deployment
+
+### 1. Launching the Telegram Bot
+You can run the bot on Windows or Linux to receive links from Telegram and return screenshots:
+
+```bash
+# Direct execution with Bot Token
+python telegram_bot.py --token "YOUR_TELEGRAM_BOT_TOKEN"
+
+# Restricting to specific Telegram User IDs (whitelist)
+python telegram_bot.py --token "YOUR_TELEGRAM_BOT_TOKEN" --allowed-users "12345678,87654321"
+
+# Using proxy (for servers inside Iran)
+python telegram_bot.py --token "YOUR_TELEGRAM_BOT_TOKEN" --proxy "socks5://127.0.0.1:10808"
+```
+
+### 2. Linux VPS Installation (Ubuntu / Debian)
+```bash
+# 1. Install system dependencies & Persian fonts
+sudo apt update && sudo apt install -y git python3 python3-venv python3-pip fonts-vazirmatn fonts-dejavu
+
+# 2. Clone repo & create virtualenv
+git clone https://github.com/hamedhdd/aparat-auto-liker.git /opt/aparat-auto-liker
+cd /opt/aparat-auto-liker
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+
+# 3. Install Playwright browser & Linux dependencies
+playwright install chromium --with-deps
+
+# 4. Set up systemd service for 24/7 background operation
+sudo cp aparat-bot.service /etc/systemd/system/
+sudo nano /etc/systemd/system/aparat-bot.service   # Insert your Bot Token
+sudo systemctl daemon-reload
+sudo systemctl enable --now aparat-bot
+```
+
+*Detailed step-by-step instructions available in `Aparat_Telegram_Bot_Linux_Deployment_Guide.md`.*

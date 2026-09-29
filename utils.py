@@ -277,15 +277,25 @@ def render_chrome_dark_topbar(width: int, url: str, page_title: str) -> Image.Im
     # Aparat red logo dot
     draw.ellipse([tab_x0 + 12, 18, tab_x0 + 26, 32], fill=(223, 15, 80, 255))
 
-    # Font handling
-    try:
-        font_tab = ImageFont.truetype("arial.ttf", 12)
-        font_url = ImageFont.truetype("arial.ttf", 13)
-        font_icons = ImageFont.truetype("segoeui.ttf", 13)
-    except Exception:
-        font_tab = ImageFont.load_default()
-        font_url = ImageFont.load_default()
-        font_icons = ImageFont.load_default()
+    # Cross-platform font handling (Windows / Linux / macOS)
+    def load_best_font(size: int, is_bold: bool = False):
+        font_candidates = [
+            "arial.ttf", "Arial.ttf",
+            "DejaVuSans.ttf", "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+            "LiberationSans-Regular.ttf", "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
+            "FreeSans.ttf", "/usr/share/fonts/truetype/freefont/FreeSans.ttf",
+            "Vazirmatn-Regular.ttf", "/usr/share/fonts/truetype/vazirmatn/Vazirmatn-Regular.ttf",
+        ]
+        for candidate in font_candidates:
+            try:
+                return ImageFont.truetype(candidate, size)
+            except Exception:
+                continue
+        return ImageFont.load_default()
+
+    font_tab = load_best_font(12)
+    font_url = load_best_font(13)
+    font_icons = load_best_font(13)
 
     display_title = (page_title[:24] + "...") if len(page_title) > 24 else page_title
     draw.text((tab_x0 + 34, 18), display_title, fill=(232, 234, 237, 255), font=font_tab)

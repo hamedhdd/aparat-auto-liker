@@ -138,24 +138,41 @@ def run(
         chrome_args.extend(["--force-dark-mode", "--enable-features=WebContentsForceDark"])
 
     with sync_playwright() as p:
-        # Launch using Google Chrome channel installed on system
+        # Launch using Google Chrome channel, with fallback to bundled Chromium
         if user_data_dir:
             logger.info(f"Using persistent Chrome user data directory: {user_data_dir}")
-            context = p.chromium.launch_persistent_context(
-                user_data_dir=user_data_dir,
-                channel="chrome",
-                headless=headless,
-                args=chrome_args + ["--start-maximized"],
-                color_scheme=theme,
-                viewport=None,
-            )
+            try:
+                context = p.chromium.launch_persistent_context(
+                    user_data_dir=user_data_dir,
+                    channel="chrome",
+                    headless=headless,
+                    args=chrome_args + ["--start-maximized"],
+                    color_scheme=theme,
+                    viewport=None,
+                )
+            except Exception:
+                logger.info("Chrome channel unavailable; using default Chromium for persistent context...")
+                context = p.chromium.launch_persistent_context(
+                    user_data_dir=user_data_dir,
+                    headless=headless,
+                    args=chrome_args + ["--start-maximized"],
+                    color_scheme=theme,
+                    viewport=None,
+                )
             browser = None
         else:
-            browser = p.chromium.launch(
-                channel="chrome",
-                headless=headless,
-                args=chrome_args,
-            )
+            try:
+                browser = p.chromium.launch(
+                    channel="chrome",
+                    headless=headless,
+                    args=chrome_args,
+                )
+            except Exception:
+                logger.info("Chrome channel unavailable; falling back to bundled Chromium...")
+                browser = p.chromium.launch(
+                    headless=headless,
+                    args=chrome_args,
+                )
             context = browser.new_context(
                 viewport={"width": 1440, "height": 900},
                 user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36",
