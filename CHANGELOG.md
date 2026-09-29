@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.2] - 2026-09-29
+
+### Fixed
+- **Instant Systemd Log Streaming**: Added `PYTHONUNBUFFERED=1`, explicit stdout logging handler, and `-u` flag to ensure all bot interactions and progress events stream immediately to `journalctl`.
+- **Skip Ad Click Timeout**: Scoped skip button click timeout to 3 seconds (`timeout=3000`) with error handling, preventing default 30-second Playwright actionability wait when skip elements change dynamically.
+
 ## [1.2.1] - 2026-09-29
 
 ### Added

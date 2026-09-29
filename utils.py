@@ -59,7 +59,10 @@ def try_click_skip_button(page: Page) -> bool:
                     btn = skip_locator.nth(i)
                     if btn.is_visible():
                         logger.info(f"Clicking skip ad button with text: '{text}'")
-                        btn.click(force=True)
+                        try:
+                            btn.click(force=True, timeout=3000)
+                        except Exception:
+                            pass
                         time.sleep(1)
                         return True
         # Check by JavaScript for countdown converted to button

@@ -34,11 +34,16 @@ from utils import (
 
 if sys.stdout:
     sys.stdout.reconfigure(encoding="utf-8")
+if sys.stderr:
+    sys.stderr.reconfigure(encoding="utf-8")
+
+handler = logging.StreamHandler(sys.stdout)
+formatter = logging.Formatter("[%(asctime)s] [%(levelname)s] %(message)s", datefmt="%H:%M:%S")
+handler.setFormatter(formatter)
 
 logging.basicConfig(
     level=logging.INFO,
-    format="[%(asctime)s] [%(levelname)s] %(message)s",
-    datefmt="%H:%M:%S",
+    handlers=[handler],
 )
 logger = logging.getLogger("AparatTelegramBot")
 

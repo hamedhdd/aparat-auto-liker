@@ -7,13 +7,14 @@ Type=simple
 User=root
 WorkingDirectory=/opt/aparat-auto-liker
 Environment="PATH=/opt/aparat-auto-liker/.venv/bin:/usr/local/bin:/usr/bin:/bin"
+Environment="PYTHONUNBUFFERED=1"
 Environment="TELEGRAM_BOT_TOKEN=YOUR_TELEGRAM_BOT_TOKEN_HERE"
 # Optional proxy for Iran servers:
 # Environment="TELEGRAM_PROXY=socks5://127.0.0.1:10808"
 # Optional whitelist of Telegram user IDs:
 # Environment="ALLOWED_USERS=12345678,87654321"
 
-ExecStart=/opt/aparat-auto-liker/.venv/bin/python telegram_bot.py
+ExecStart=/opt/aparat-auto-liker/.venv/bin/python -u telegram_bot.py
 Restart=always
 RestartSec=10
 
